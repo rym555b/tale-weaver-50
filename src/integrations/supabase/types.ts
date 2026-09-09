@@ -14,7 +14,291 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      books: {
+        Row: {
+          cover_back_url: string | null
+          cover_front_url: string | null
+          created_at: string
+          description: string | null
+          error: string | null
+          generate_audio: boolean
+          genre: string | null
+          id: string
+          language: string
+          narration_style: string
+          source_text: string
+          status: string
+          style: string
+          target_pages: number
+          title: string
+          total_pages: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cover_back_url?: string | null
+          cover_front_url?: string | null
+          created_at?: string
+          description?: string | null
+          error?: string | null
+          generate_audio?: boolean
+          genre?: string | null
+          id?: string
+          language?: string
+          narration_style?: string
+          source_text?: string
+          status?: string
+          style?: string
+          target_pages?: number
+          title?: string
+          total_pages?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cover_back_url?: string | null
+          cover_front_url?: string | null
+          created_at?: string
+          description?: string | null
+          error?: string | null
+          generate_audio?: boolean
+          genre?: string | null
+          id?: string
+          language?: string
+          narration_style?: string
+          source_text?: string
+          status?: string
+          style?: string
+          target_pages?: number
+          title?: string
+          total_pages?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      chapters: {
+        Row: {
+          book_id: string
+          chapter_number: number
+          created_at: string
+          id: string
+          source_end: number | null
+          source_start: number | null
+          summary: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          book_id: string
+          chapter_number: number
+          created_at?: string
+          id?: string
+          source_end?: number | null
+          source_start?: number | null
+          summary?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          book_id?: string
+          chapter_number?: number
+          created_at?: string
+          id?: string
+          source_end?: number | null
+          source_start?: number | null
+          summary?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chapters_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      characters: {
+        Row: {
+          age: string | null
+          appearance: string | null
+          book_id: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          personality: string | null
+          reference_image_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          age?: string | null
+          appearance?: string | null
+          book_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          personality?: string | null
+          reference_image_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          age?: string | null
+          appearance?: string | null
+          book_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          personality?: string | null
+          reference_image_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "characters_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      generation_jobs: {
+        Row: {
+          book_id: string
+          created_at: string
+          current_item: number
+          error: string | null
+          id: string
+          progress: number
+          status: string
+          total_items: number
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          book_id: string
+          created_at?: string
+          current_item?: number
+          error?: string | null
+          id?: string
+          progress?: number
+          status?: string
+          total_items?: number
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          book_id?: string
+          created_at?: string
+          current_item?: number
+          error?: string | null
+          id?: string
+          progress?: number
+          status?: string
+          total_items?: number
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_jobs_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pages: {
+        Row: {
+          audio_url: string | null
+          book_id: string
+          chapter_id: string | null
+          created_at: string
+          error: string | null
+          id: string
+          image_prompt: string | null
+          image_url: string | null
+          page_number: number
+          scene_description: string | null
+          status: string
+          text: string
+          updated_at: string
+        }
+        Insert: {
+          audio_url?: string | null
+          book_id: string
+          chapter_id?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          image_prompt?: string | null
+          image_url?: string | null
+          page_number: number
+          scene_description?: string | null
+          status?: string
+          text?: string
+          updated_at?: string
+        }
+        Update: {
+          audio_url?: string | null
+          book_id?: string
+          chapter_id?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          image_prompt?: string | null
+          image_url?: string | null
+          page_number?: number
+          scene_description?: string | null
+          status?: string
+          text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pages_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pages_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
