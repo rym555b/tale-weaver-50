@@ -20,7 +20,15 @@ function extractJson(content: string): string {
 export function createLovableTextProvider(): TextProvider {
   return {
     id: `lovable:${MODEL}`,
-    async generateJson<T>({ system, prompt, maxOutputTokens = 4000 }): Promise<T> {
+    async generateJson<T>({
+      system,
+      prompt,
+      maxOutputTokens = 4000,
+    }: {
+      system: string;
+      prompt: string;
+      maxOutputTokens?: number;
+    }): Promise<T> {
       const apiKey = process.env["LOVABLE_API_KEY"];
       if (!apiKey) throw new Error("MISSING_AI_KEY");
 
