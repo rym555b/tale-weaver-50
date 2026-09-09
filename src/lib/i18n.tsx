@@ -1,16 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
-export type Locale = "fr" | "en";
+export type Locale = "fr" | "en" | "ar";
 
 const STORAGE_KEY = "storybook.locale";
+
+export function directionFor(locale: string): "rtl" | "ltr" {
+  return locale === "ar" ? "rtl" : "ltr";
+}
 
 const dictionary = {
   fr: {
     appName: "Storybook",
     tagline: "Transformez un long texte en livre illustré, chapitre par chapitre.",
     heroLead:
-      "Collez votre histoire — 10, 100 ou 300 pages — et Storybook l'analyse, crée sa bible des personnages, la découpe en chapitres et en pages, puis vous la donne à lire.",
+      "Collez votre histoire — 10, 100 ou 300 pages — et Storybook l'analyse, crée sa bible des personnages, la découpe en chapitres et en pages, illustre chaque page, dessine les couvertures et la raconte à voix haute.",
     createBook: "✨ Créer un livre avec l'IA",
     myLibrary: "Ma bibliothèque",
     signIn: "Se connecter",
@@ -33,10 +37,12 @@ const dictionary = {
     language: "Langue du livre",
     french: "Français",
     english: "Anglais",
+    arabic: "Arabe",
     illustrationStyle: "Style d'illustration",
     narrationStyle: "Style de narration",
     approxPages: "Nombre approximatif de pages",
     generateAudio: "Générer l'audio",
+    audioHint: "Une narration est créée pour chaque page.",
     yes: "Oui",
     no: "Non",
     generateMyBook: "✨ Générer mon livre",
@@ -51,6 +57,7 @@ const dictionary = {
     stepImages: "Illustrations",
     stepAudio: "Narration audio",
     stepCovers: "Couvertures",
+    audioDisabled: "Narration désactivée pour ce livre",
     comingNext: "Prochaine étape du projet",
     pause: "Mettre en pause",
     resume: "Reprendre la génération",
@@ -63,6 +70,9 @@ const dictionary = {
     status_pending: "En attente",
     status_analyzing: "Analyse",
     status_paginating: "Mise en pages",
+    status_illustrating: "Illustrations",
+    status_covers: "Couvertures",
+    status_narrating: "Narration",
     status_processing: "En cours",
     status_completed: "Terminé",
     status_failed: "Échec",
@@ -74,6 +84,14 @@ const dictionary = {
     listen: "Écouter",
     audioSoon: "L'audio de cette page n'est pas encore généré.",
     imageSoon: "L'illustration de cette page n'est pas encore générée.",
+    regenerateImage: "Régénérer l'illustration",
+    regenerateAudio: "Régénérer l'audio",
+    regenerateCoverFront: "Régénérer la couverture avant",
+    regenerateCoverBack: "Régénérer la couverture arrière",
+    regenerating: "Régénération…",
+    pageFailed: "Cette page a échoué.",
+    coverFront: "Couverture avant",
+    coverBack: "Couverture arrière",
     delete: "Supprimer",
     confirmDelete: "Supprimer définitivement ce livre ?",
     cancel: "Annuler",
@@ -88,7 +106,7 @@ const dictionary = {
     appName: "Storybook",
     tagline: "Turn a long text into an illustrated book, chapter by chapter.",
     heroLead:
-      "Paste your story — 10, 100 or 300 pages — and Storybook analyses it, builds a character bible, splits it into chapters and pages, then hands it back to you as a book.",
+      "Paste your story — 10, 100 or 300 pages — and Storybook analyses it, builds a character bible, splits it into chapters and pages, illustrates every page, designs the covers and reads it aloud.",
     createBook: "✨ Create a book with AI",
     myLibrary: "My library",
     signIn: "Sign in",
@@ -111,10 +129,12 @@ const dictionary = {
     language: "Book language",
     french: "French",
     english: "English",
+    arabic: "Arabic",
     illustrationStyle: "Illustration style",
     narrationStyle: "Narration style",
     approxPages: "Approximate number of pages",
     generateAudio: "Generate audio",
+    audioHint: "A narration is created for every page.",
     yes: "Yes",
     no: "No",
     generateMyBook: "✨ Generate my book",
@@ -129,6 +149,7 @@ const dictionary = {
     stepImages: "Illustrations",
     stepAudio: "Audio narration",
     stepCovers: "Covers",
+    audioDisabled: "Narration is turned off for this book",
     comingNext: "Next stage of the project",
     pause: "Pause",
     resume: "Resume generation",
@@ -141,6 +162,9 @@ const dictionary = {
     status_pending: "Pending",
     status_analyzing: "Analysing",
     status_paginating: "Paginating",
+    status_illustrating: "Illustrating",
+    status_covers: "Covers",
+    status_narrating: "Narrating",
     status_processing: "Processing",
     status_completed: "Completed",
     status_failed: "Failed",
@@ -152,6 +176,14 @@ const dictionary = {
     listen: "Listen",
     audioSoon: "Audio for this page has not been generated yet.",
     imageSoon: "The illustration for this page has not been generated yet.",
+    regenerateImage: "Regenerate illustration",
+    regenerateAudio: "Regenerate audio",
+    regenerateCoverFront: "Regenerate front cover",
+    regenerateCoverBack: "Regenerate back cover",
+    regenerating: "Regenerating…",
+    pageFailed: "This page failed.",
+    coverFront: "Front cover",
+    coverBack: "Back cover",
     delete: "Delete",
     confirmDelete: "Permanently delete this book?",
     cancel: "Cancel",
@@ -162,12 +194,105 @@ const dictionary = {
     noPagesYet: "Pages are not ready yet.",
     of: "of",
   },
+  ar: {
+    appName: "ستوري بوك",
+    tagline: "حوّل نصًا طويلًا إلى كتاب مصوّر، فصلًا بعد فصل.",
+    heroLead:
+      "الصق قصتك — عشر صفحات أو مئة أو ثلاثمئة — وسيحللها ستوري بوك، ويبني دليل الشخصيات، ويقسمها إلى فصول وصفحات، ويرسم صورة لكل صفحة، ويصمم الغلافين، ويقرؤها بصوت مسموع.",
+    createBook: "✨ إنشاء كتاب بالذكاء الاصطناعي",
+    myLibrary: "مكتبتي",
+    signIn: "تسجيل الدخول",
+    signOut: "تسجيل الخروج",
+    signUp: "إنشاء حساب",
+    email: "البريد الإلكتروني",
+    password: "كلمة المرور",
+    displayName: "الاسم المعروض",
+    continueWithGoogle: "المتابعة باستخدام Google",
+    authTitle: "الدخول إلى ستوري بوك",
+    authSubtitle: "كتبك خاصة ومرتبطة بحسابك.",
+    noAccount: "ليس لديك حساب؟",
+    haveAccount: "لديك حساب بالفعل؟",
+    newBook: "كتاب جديد",
+    titleOptional: "العنوان (اختياري)",
+    titlePlaceholder: "اتركه فارغًا ليقترحه الذكاء الاصطناعي",
+    yourStory: "قصتك",
+    storyPlaceholder: "الصق نصك هنا، بأي طول تريد…",
+    importFile: "استيراد ملف .txt",
+    language: "لغة الكتاب",
+    french: "الفرنسية",
+    english: "الإنجليزية",
+    arabic: "العربية",
+    illustrationStyle: "أسلوب الرسم",
+    narrationStyle: "أسلوب السرد",
+    approxPages: "عدد الصفحات التقريبي",
+    generateAudio: "إنشاء التسجيل الصوتي",
+    audioHint: "يُنشأ سرد صوتي لكل صفحة.",
+    yes: "نعم",
+    no: "لا",
+    generateMyBook: "✨ أنشئ كتابي",
+    words: "كلمة",
+    characters: "حرف",
+    estimated: "حوالي",
+    pages: "صفحة",
+    tooShort: "أضف ٢٠٠ حرف على الأقل.",
+    generating: "جارٍ الإنشاء",
+    stepAnalysis: "تحليل النص والشخصيات",
+    stepPages: "التقسيم إلى فصول وصفحات",
+    stepImages: "الرسوم",
+    stepAudio: "السرد الصوتي",
+    stepCovers: "الأغلفة",
+    audioDisabled: "السرد الصوتي غير مُفعّل لهذا الكتاب",
+    comingNext: "المرحلة التالية",
+    pause: "إيقاف مؤقت",
+    resume: "متابعة الإنشاء",
+    retry: "إعادة المحاولة",
+    openReader: "افتح القارئ",
+    readBook: "قراءة",
+    continue: "متابعة",
+    library: "المكتبة",
+    emptyLibrary: "لا توجد كتب بعد. أنشئ أول كتاب!",
+    status_pending: "قيد الانتظار",
+    status_analyzing: "تحليل",
+    status_paginating: "تقسيم الصفحات",
+    status_illustrating: "الرسوم",
+    status_covers: "الأغلفة",
+    status_narrating: "السرد",
+    status_processing: "قيد التنفيذ",
+    status_completed: "مكتمل",
+    status_failed: "فشل",
+    chapters: "الفصول",
+    charactersTitle: "الشخصيات",
+    page: "صفحة",
+    previous: "السابقة",
+    next: "التالية",
+    listen: "استماع",
+    audioSoon: "لم يُنشأ الصوت لهذه الصفحة بعد.",
+    imageSoon: "لم تُنشأ الصورة لهذه الصفحة بعد.",
+    regenerateImage: "إعادة إنشاء الصورة",
+    regenerateAudio: "إعادة إنشاء الصوت",
+    regenerateCoverFront: "إعادة إنشاء الغلاف الأمامي",
+    regenerateCoverBack: "إعادة إنشاء الغلاف الخلفي",
+    regenerating: "جارٍ إعادة الإنشاء…",
+    pageFailed: "فشلت هذه الصفحة.",
+    coverFront: "الغلاف الأمامي",
+    coverBack: "الغلاف الخلفي",
+    delete: "حذف",
+    confirmDelete: "حذف هذا الكتاب نهائيًا؟",
+    cancel: "إلغاء",
+    errorGeneric: "حدث خطأ ما.",
+    missingKey: "مفتاح خدمة الذكاء الاصطناعي غير متوفر على الخادم.",
+    summary: "الملخص",
+    backToLibrary: "العودة إلى المكتبة",
+    noPagesYet: "الصفحات غير جاهزة بعد.",
+    of: "من",
+  },
 } as const;
 
 export type TranslationKey = keyof (typeof dictionary)["fr"];
 
 type I18nValue = {
   locale: Locale;
+  dir: "rtl" | "ltr";
   setLocale: (locale: Locale) => void;
   t: (key: TranslationKey) => string;
 };
@@ -179,8 +304,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored === "fr" || stored === "en") setLocaleState(stored);
+    if (stored === "fr" || stored === "en" || stored === "ar") setLocaleState(stored);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    document.documentElement.dir = directionFor(locale);
+  }, [locale]);
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
@@ -190,6 +320,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const value = useMemo<I18nValue>(
     () => ({
       locale,
+      dir: directionFor(locale),
       setLocale,
       t: (key) => dictionary[locale][key],
     }),
