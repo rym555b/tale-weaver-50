@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedCreateRouteImport } from './routes/_authenticated/create'
 import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
 
 const IndexRoute = IndexRouteImport.update({
@@ -28,6 +29,11 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedCreateRoute = AuthenticatedCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
   id: '/library',
   path: '/library',
@@ -37,11 +43,13 @@ const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/create': typeof AuthenticatedCreateRoute
   '/library': typeof AuthenticatedLibraryRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/create': typeof AuthenticatedCreateRoute
   '/library': typeof AuthenticatedLibraryRoute
 }
 export interface FileRoutesById {
@@ -49,14 +57,21 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/create': typeof AuthenticatedCreateRoute
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/library'
+  fullPaths: '/' | '/auth' | '/create' | '/library'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/library'
-  id: '__root__' | '/' | '/_authenticated' | '/auth' | '/_authenticated/library'
+  to: '/' | '/auth' | '/create' | '/library'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/create'
+    | '/_authenticated/library'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -88,6 +103,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/create': {
+      id: '/_authenticated/create'
+      path: '/create'
+      fullPath: '/create'
+      preLoaderRoute: typeof AuthenticatedCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/library': {
       id: '/_authenticated/library'
       path: '/library'
@@ -99,10 +121,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCreateRoute: typeof AuthenticatedCreateRoute
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCreateRoute: AuthenticatedCreateRoute,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
 }
 
