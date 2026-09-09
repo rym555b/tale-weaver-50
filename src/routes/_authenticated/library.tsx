@@ -15,8 +15,7 @@ export const Route = createFileRoute("/_authenticated/library")({
 });
 
 function statusKey(status: string): TranslationKey {
-  const key = `status_${status}` as TranslationKey;
-  return key in ({} as never) ? key : key;
+  return `status_${status}` as TranslationKey;
 }
 
 function LibraryPage() {
