@@ -1,13 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/integrations/supabase/types";
+import { createLovableAudioProvider } from "./ai/lovable-audio.server";
+import { createLovableImageProvider } from "./ai/lovable-image.server";
 import { createLovableTextProvider } from "./ai/lovable-text.server";
-import type { TextProvider } from "./ai/types";
+import type { AudioProvider, ImageProvider, TextProvider } from "./ai/types";
+import { uploadBookFile } from "./media.server";
 import { charsPerPageFor, splitIntoPages, splitIntoSegments } from "./text-splitting";
 
 export type Db = SupabaseClient<Database>;
 
-export const JOB_ORDER = ["analysis", "pages"] as const;
+export const JOB_ORDER = ["analysis", "pages", "images", "covers", "audio"] as const;
 export type JobType = (typeof JOB_ORDER)[number];
 
 export type StepResult = {
@@ -48,6 +51,25 @@ Rules:
 - "characters": only characters appearing in this excerpt. "appearance" must be a concrete, reusable visual description (hair, eyes, clothing) so illustrations stay consistent.
 - Write all values in the requested output language.`;
 
+const SCENE_SYSTEM = `You turn one page of a book into an illustration brief. Return STRICT JSON only, no prose, no markdown.
+Schema:
+{ "sceneDescription": string, "imagePrompt": string }
+Rules:
+- "sceneDescription" (1-2 sentences) names who is present, where, when and the mood of THIS page.
+- "imagePrompt" is a single English prompt for an image model: subjects with their exact recurring appearance, setting, era, lighting, mood, composition, and the requested art style.
+- Reuse verbatim the appearance details of the character bible so the same character looks identical on every page.
+- No text, no letters, no speech bubbles, no watermark in the image. Never mention page numbers.
+- Both values are always written in English, whatever the book language.`;
+
+const COVER_SYSTEM = `You design book covers. Return STRICT JSON only: { "imagePrompt": string }.
+The prompt is in English, describes one striking cover illustration (front) or a matching quieter back-cover illustration, keeps the main character's exact appearance, respects the requested art style, and contains NO text, letters or typography.`;
+
+export function languageLabel(language: string): string {
+  if (language === "en") return "English";
+  if (language === "ar") return "Arabic (modern standard Arabic, right-to-left)";
+  return "French";
+}
+
 function segmentsFor(book: { source_text: string }) {
   return splitIntoSegments(book.source_text, 9000);
 }
@@ -82,7 +104,10 @@ export async function runNextUnit(db: Db, bookId: string): Promise<StepResult> {
 
     try {
       if (type === "analysis") return await runAnalysisUnit(db, book, job);
-      return await runPagesUnit(db, book, job);
+      if (type === "pages") return await runPagesUnit(db, book, job);
+      if (type === "images") return await runImagesUnit(db, book, job);
+      if (type === "covers") return await runCoversUnit(db, book, job);
+      return await runAudioUnit(db, book, job);
     } catch (error) {
       const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
       await failJob(db, job.id, bookId, message);
@@ -96,6 +121,7 @@ export async function runNextUnit(db: Db, bookId: string): Promise<StepResult> {
 
 type BookRow = Database["public"]["Tables"]["books"]["Row"];
 type JobRow = Database["public"]["Tables"]["generation_jobs"]["Row"];
+type PageRow = Database["public"]["Tables"]["pages"]["Row"];
 
 async function runAnalysisUnit(db: Db, book: BookRow, job: JobRow): Promise<StepResult> {
   const segments = segmentsFor(book);
@@ -118,7 +144,7 @@ async function runAnalysisUnit(db: Db, book: BookRow, job: JobRow): Promise<Step
     .eq("book_id", book.id);
 
   const context = [
-    `Output language: ${book.language === "en" ? "English" : "French"}.`,
+    `Output language: ${languageLabel(book.language)}.`,
     book.title ? `Known book title: ${book.title}` : "",
     book.description ? `Known summary: ${book.description}` : "",
     knownCharacters?.length
@@ -210,7 +236,7 @@ async function runPagesUnit(db: Db, book: BookRow, job: JobRow): Promise<StepRes
       .eq("id", job.id);
     await db
       .from("books")
-      .update({ status: "completed", total_pages: count ?? 0, error: null })
+      .update({ total_pages: count ?? 0, error: null })
       .eq("id", book.id);
     return { done: false, jobType: "pages", label: "pages", progress: 100 };
   }
@@ -263,20 +289,319 @@ async function runPagesUnit(db: Db, book: BookRow, job: JobRow): Promise<StepRes
   return { done: false, jobType: "pages", label: "pages", progress };
 }
 
+/* ------------------------------------------------------------------ */
+/* Shared context used by every illustration and narration prompt      */
+/* ------------------------------------------------------------------ */
+
+async function characterBible(db: Db, bookId: string): Promise<string> {
+  const { data } = await db
+    .from("characters")
+    .select("name, age, appearance, personality")
+    .eq("book_id", bookId);
+  if (!data?.length) return "No recurring character recorded yet.";
+  return data
+    .map(
+      (c) =>
+        `- ${c.name}${c.age ? ` (${c.age})` : ""}: ${c.appearance ?? "appearance unspecified"}${
+          c.personality ? ` | ${c.personality}` : ""
+        }`,
+    )
+    .join("\n");
+}
+
+function isFatal(message: string) {
+  return message.includes("MISSING_AI_KEY") || message.startsWith("STORAGE_");
+}
+
+/** Builds (and stores) the scene + image prompt for one page. */
+async function buildPagePrompt(db: Db, book: BookRow, page: PageRow, bible: string) {
+  const provider = createLovableTextProvider();
+  const { data: chapter } = page.chapter_id
+    ? await db.from("chapters").select("title, summary").eq("id", page.chapter_id).maybeSingle()
+    : { data: null };
+
+  const result = await provider.generateJson<{ sceneDescription?: string; imagePrompt?: string }>({
+    system: SCENE_SYSTEM,
+    prompt: [
+      `Book title: ${book.title || "untitled"}`,
+      `Genre: ${book.genre ?? "unspecified"}`,
+      `Book language (for understanding only): ${languageLabel(book.language)}`,
+      `Art style requested: ${book.style}`,
+      chapter?.title ? `Chapter: ${chapter.title}` : "",
+      chapter?.summary ? `Chapter summary: ${chapter.summary}` : "",
+      `Character bible:\n${bible}`,
+      `--- PAGE ${page.page_number} TEXT ---\n${page.text.slice(0, 4000)}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    maxOutputTokens: 900,
+  });
+
+  const imagePrompt =
+    result.imagePrompt?.trim() ||
+    `${book.style} illustration of: ${page.text.slice(0, 400)}. No text in the image.`;
+
+  await db
+    .from("pages")
+    .update({
+      scene_description: result.sceneDescription?.slice(0, 1000) ?? null,
+      image_prompt: imagePrompt.slice(0, 4000),
+    })
+    .eq("id", page.id);
+
+  return imagePrompt;
+}
+
+/** Generates + stores the illustration of one page. Throws on failure. */
+export async function generatePageImage(
+  db: Db,
+  book: BookRow,
+  page: PageRow,
+  options: { reusePrompt?: boolean } = {},
+) {
+  const bible = await characterBible(db, book.id);
+  const prompt =
+    options.reusePrompt && page.image_prompt
+      ? page.image_prompt
+      : await buildPagePrompt(db, book, page, bible);
+
+  await db.from("pages").update({ status: "generating_image", error: null }).eq("id", page.id);
+
+  const images: ImageProvider = createLovableImageProvider();
+  const { bytes, contentType } = await images.generateImage({
+    prompt: `${prompt}\n\nArt style: ${book.style}. Consistent characters:\n${bible}`,
+    aspect: "square",
+  });
+
+  const path = await uploadBookFile(
+    `${book.id}/pages/${page.page_number}.png`,
+    bytes,
+    contentType,
+  );
+
+  await db
+    .from("pages")
+    .update({
+      image_url: path,
+      status: page.audio_url ? "completed" : "image_completed",
+      error: null,
+    })
+    .eq("id", page.id);
+
+  return path;
+}
+
+/** Generates + stores the narration of one page. Throws on failure. */
+export async function generatePageAudio(db: Db, book: BookRow, page: PageRow) {
+  await db.from("pages").update({ status: "generating_audio", error: null }).eq("id", page.id);
+
+  const audio: AudioProvider = createLovableAudioProvider();
+  const { bytes, contentType } = await audio.synthesize({
+    text: page.text,
+    voice: "alloy",
+    instructions: `Read this page of a book aloud in ${languageLabel(book.language)}. Narration style: ${book.narration_style}. Calm storytelling pace, natural pauses at punctuation.`,
+  });
+
+  const path = await uploadBookFile(`${book.id}/audio/${page.page_number}.mp3`, bytes, contentType);
+
+  await db
+    .from("pages")
+    .update({ audio_url: path, status: "completed", error: null })
+    .eq("id", page.id);
+
+  return path;
+}
+
+/** Generates + stores one cover. Throws on failure. */
+export async function generateCover(db: Db, book: BookRow, side: "front" | "back") {
+  const bible = await characterBible(db, book.id);
+  const provider = createLovableTextProvider();
+
+  const result = await provider.generateJson<{ imagePrompt?: string }>({
+    system: COVER_SYSTEM,
+    prompt: [
+      `Cover side: ${side}`,
+      `Title: ${book.title || "untitled"}`,
+      `Genre: ${book.genre ?? "unspecified"}`,
+      `Summary: ${book.description ?? ""}`.slice(0, 1500),
+      `Art style requested: ${book.style}`,
+      `Character bible:\n${bible}`,
+      side === "front"
+        ? "Front cover: bold, iconic, centred on the main character and the heart of the story."
+        : "Back cover: quieter, atmospheric, with clear empty space where the summary text will be laid over.",
+    ].join("\n"),
+    maxOutputTokens: 700,
+  });
+
+  const prompt =
+    result.imagePrompt?.trim() ||
+    `${book.style} ${side} book cover illustration for "${book.title}". No text.`;
+
+  const images = createLovableImageProvider();
+  const { bytes, contentType } = await images.generateImage({ prompt, aspect: "portrait" });
+  const path = await uploadBookFile(`${book.id}/cover/${side}.png`, bytes, contentType);
+
+  await db
+    .from("books")
+    .update(side === "front" ? { cover_front_url: path } : { cover_back_url: path })
+    .eq("id", book.id);
+
+  return path;
+}
+
+/* ------------------------------------------------------------------ */
+/* Job units: one page (or one cover) per call                         */
+/* ------------------------------------------------------------------ */
+
+async function pageCounts(db: Db, bookId: string, column: "image_url" | "audio_url") {
+  const { count: total } = await db
+    .from("pages")
+    .select("id", { count: "exact", head: true })
+    .eq("book_id", bookId);
+  const { count: remaining } = await db
+    .from("pages")
+    .select("id", { count: "exact", head: true })
+    .eq("book_id", bookId)
+    .is(column, null)
+    .neq("status", "failed");
+  return { total: total ?? 0, remaining: remaining ?? 0 };
+}
+
+async function nextPageMissing(db: Db, bookId: string, column: "image_url" | "audio_url") {
+  const { data } = await db
+    .from("pages")
+    .select("*")
+    .eq("book_id", bookId)
+    .is(column, null)
+    .neq("status", "failed")
+    .order("page_number", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+async function completeJob(db: Db, job: JobRow, total: number, type: JobType): Promise<StepResult> {
+  await db
+    .from("generation_jobs")
+    .update({ status: "completed", progress: 100, total_items: total, current_item: total })
+    .eq("id", job.id);
+  return { done: false, jobType: type, label: type, progress: 100 };
+}
+
+async function runImagesUnit(db: Db, book: BookRow, job: JobRow): Promise<StepResult> {
+  const { total, remaining } = await pageCounts(db, book.id, "image_url");
+  if (total === 0 || remaining === 0) return completeJob(db, job, total, "images");
+
+  const page = await nextPageMissing(db, book.id, "image_url");
+  if (!page) return completeJob(db, job, total, "images");
+
+  await db.from("books").update({ status: "illustrating", error: null }).eq("id", book.id);
+
+  try {
+    await generatePageImage(db, book, page);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "IMAGE_FAILED";
+    if (isFatal(message)) throw error;
+    // One broken page never stops the book: mark it and move on.
+    await db
+      .from("pages")
+      .update({ status: "failed", error: message.slice(0, 400) })
+      .eq("id", page.id);
+  }
+
+  const after = await pageCounts(db, book.id, "image_url");
+  const done = after.total - after.remaining;
+  const progress = after.total > 0 ? Math.round((done / after.total) * 100) : 100;
+  await db
+    .from("generation_jobs")
+    .update({
+      status: after.remaining === 0 ? "completed" : "processing",
+      current_item: done,
+      total_items: after.total,
+      progress,
+      error: null,
+    })
+    .eq("id", job.id);
+
+  return { done: false, jobType: "images", label: "images", progress };
+}
+
+async function runCoversUnit(db: Db, book: BookRow, job: JobRow): Promise<StepResult> {
+  const sides: Array<"front" | "back"> = ["front", "back"];
+  const missing = sides.filter((side) =>
+    side === "front" ? !book.cover_front_url : !book.cover_back_url,
+  );
+  if (missing.length === 0) return completeJob(db, job, 2, "covers");
+
+  await db.from("books").update({ status: "covers", error: null }).eq("id", book.id);
+  await generateCover(db, book, missing[0]!);
+
+  const done = 2 - (missing.length - 1);
+  const progress = Math.round((done / 2) * 100);
+  await db
+    .from("generation_jobs")
+    .update({
+      status: done >= 2 ? "completed" : "processing",
+      current_item: done,
+      total_items: 2,
+      progress,
+      error: null,
+    })
+    .eq("id", job.id);
+
+  return { done: false, jobType: "covers", label: "covers", progress };
+}
+
+async function runAudioUnit(db: Db, book: BookRow, job: JobRow): Promise<StepResult> {
+  if (!book.generate_audio) return completeJob(db, job, 0, "audio");
+
+  const { total, remaining } = await pageCounts(db, book.id, "audio_url");
+  if (total === 0 || remaining === 0) return completeJob(db, job, total, "audio");
+
+  const page = await nextPageMissing(db, book.id, "audio_url");
+  if (!page) return completeJob(db, job, total, "audio");
+
+  await db.from("books").update({ status: "narrating", error: null }).eq("id", book.id);
+
+  try {
+    await generatePageAudio(db, book, page);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "AUDIO_FAILED";
+    if (isFatal(message)) throw error;
+    await db
+      .from("pages")
+      .update({ status: "failed", error: message.slice(0, 400) })
+      .eq("id", page.id);
+  }
+
+  const after = await pageCounts(db, book.id, "audio_url");
+  const done = after.total - after.remaining;
+  const progress = after.total > 0 ? Math.round((done / after.total) * 100) : 100;
+  await db
+    .from("generation_jobs")
+    .update({
+      status: after.remaining === 0 ? "completed" : "processing",
+      current_item: done,
+      total_items: after.total,
+      progress,
+      error: null,
+    })
+    .eq("id", job.id);
+
+  return { done: false, jobType: "audio", label: "audio", progress };
+}
+
 /** Creates the jobs for a fresh book. */
 export async function createJobsForBook(db: Db, bookId: string, sourceText: string) {
   const segments = splitIntoSegments(sourceText, 9000);
+  const base = { status: "pending", total_items: 0, current_item: 0, progress: 0 };
   const { error } = await db.from("generation_jobs").upsert(
     [
-      {
-        book_id: bookId,
-        type: "analysis",
-        status: "pending",
-        total_items: segments.length,
-        current_item: 0,
-        progress: 0,
-      },
-      { book_id: bookId, type: "pages", status: "pending", total_items: 0, current_item: 0, progress: 0 },
+      { book_id: bookId, type: "analysis", ...base, total_items: segments.length },
+      { book_id: bookId, type: "pages", ...base },
+      { book_id: bookId, type: "images", ...base },
+      { book_id: bookId, type: "covers", ...base, total_items: 2 },
+      { book_id: bookId, type: "audio", ...base },
     ],
     { onConflict: "book_id,type" },
   );
