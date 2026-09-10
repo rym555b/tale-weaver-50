@@ -15,12 +15,25 @@ import { retryGeneration, runGenerationStep } from "@/lib/books.functions";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/book/$bookId")({
+  head: () => ({
+    meta: [
+      { title: "Génération du livre — Storybook" },
+      { name: "description", content: "Suivez chaque étape de création de votre livre." },
+      { property: "og:title", content: "Génération du livre — Storybook" },
+      { property: "og:description", content: "Analyse, pages, illustrations, couvertures et narration." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: BookPage,
 });
 
 const STEP_LABELS: Record<string, TranslationKey> = {
   analysis: "stepAnalysis",
   pages: "stepPages",
+  images: "stepImages",
+  covers: "stepCovers",
+  audio: "stepAudio",
 };
 
 function BookPage() {
@@ -119,7 +132,7 @@ function BookPage() {
         ) : null}
 
         <section className="mt-6 space-y-3">
-          {(["analysis", "pages"] as const).map((type) => {
+          {(["analysis", "pages", "images", "covers", "audio"] as const).map((type) => {
             const job = data?.jobs.find((j) => j.type === type);
             const progress = job?.progress ?? 0;
             return (
@@ -135,7 +148,7 @@ function BookPage() {
                     ) : (
                       <Pause className="size-4 text-muted-foreground" />
                     )}
-                    {t(STEP_LABELS[type]!)}
+                    {t(STEP_LABELS[type])}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {job?.total_items
@@ -150,9 +163,6 @@ function BookPage() {
               </div>
             );
           })}
-          <p className="text-xs text-muted-foreground">
-            {t("comingNext")}: {t("stepImages")} · {t("stepCovers")} · {t("stepAudio")}
-          </p>
         </section>
 
         <div className="mt-6 flex flex-wrap gap-3">

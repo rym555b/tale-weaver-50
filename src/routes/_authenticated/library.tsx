@@ -11,6 +11,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/library")({
+  head: () => ({
+    meta: [
+      { title: "Ma bibliothèque — Storybook" },
+      { name: "description", content: "Retrouvez vos livres illustrés et leur progression." },
+      { property: "og:title", content: "Ma bibliothèque — Storybook" },
+      { property: "og:description", content: "Vos livres, chapitres, illustrations et narrations." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: LibraryPage,
 });
 

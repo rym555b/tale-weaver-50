@@ -1,7 +1,7 @@
 import type { TextProvider } from "./types";
 
-const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-3.8-flash";
+const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/responses";
+const MODEL = "openai/gpt-6-astra";
 
 function extractJson(content: string): string {
   const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -36,15 +36,19 @@ export function createLovableTextProvider(): TextProvider {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+          "Lovable-API-Key": apiKey,
+          "X-Lovable-AIG-SDK": "fetch",
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: maxOutputTokens,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: prompt },
+          stream: true,
+          reasoning: { effort: "medium", summary: "auto" },
+          input: [
+            { role: "developer", content: system },
+            {
+              role: "user",
+              content: `${prompt}\n\nReturn one valid JSON object only. Keep the response under approximately ${maxOutputTokens} tokens.`,
+            },
           ],
         }),
       });
@@ -54,10 +58,41 @@ export function createLovableTextProvider(): TextProvider {
         throw new Error(`AI_${response.status}:${detail.slice(0, 400)}`);
       }
 
-      const payload = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      const content = payload.choices?.[0]?.message?.content ?? "";
+      if (!response.body) throw new Error("AI_EMPTY_RESPONSE");
+
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = "";
+      let content = "";
+      let streamError = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += value;
+        const blocks = buffer.split(/\r?\n\r?\n/);
+        buffer = blocks.pop() ?? "";
+        for (const block of blocks) {
+          const data = block
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trim())
+            .join("\n");
+          if (!data || data === "[DONE]") continue;
+          try {
+            const event = JSON.parse(data) as {
+              type?: string;
+              delta?: string;
+              error?: { message?: string };
+            };
+            if (event.type === "response.output_text.delta" && event.delta) content += event.delta;
+            if (event.type === "error") streamError = event.error?.message ?? "AI_STREAM_ERROR";
+          } catch {
+            // Ignore heartbeats and non-JSON provider frames.
+          }
+        }
+      }
+
+      if (streamError) throw new Error(streamError);
       if (!content.trim()) throw new Error("AI_EMPTY_RESPONSE");
 
       try {
