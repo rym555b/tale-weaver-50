@@ -24,6 +24,16 @@ import { countWords } from "@/lib/text-splitting";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/create")({
+  head: () => ({
+    meta: [
+      { title: "Créer un livre avec l’IA — Storybook" },
+      { name: "description", content: "Transformez votre histoire en livre illustré et raconté." },
+      { property: "og:title", content: "Créer un livre avec l’IA — Storybook" },
+      { property: "og:description", content: "Créez chapitres, illustrations, couvertures et narration." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: CreatePage,
 });
 
@@ -46,7 +56,7 @@ function CreatePage() {
 
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
-  const [language, setLanguage] = useState<"fr" | "en">(locale);
+  const [language, setLanguage] = useState<"fr" | "en" | "ar">(locale);
   const [style, setStyle] = useState<string>("watercolor");
   const [narration, setNarration] = useState<string>("neutral");
   const [targetPages, setTargetPages] = useState(40);
@@ -148,13 +158,17 @@ function CreatePage() {
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>{t("language")}</Label>
-                <Select value={language} onValueChange={(v) => setLanguage(v as "fr" | "en")}>
+                <Select
+                  value={language}
+                  onValueChange={(v) => setLanguage(v as "fr" | "en" | "ar")}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="fr">{t("french")}</SelectItem>
                     <SelectItem value="en">{t("english")}</SelectItem>
+                    <SelectItem value="ar">{t("arabic")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -208,7 +222,7 @@ function CreatePage() {
             <div className="flex items-center justify-between rounded-lg border border-border p-4">
               <div>
                 <Label htmlFor="audio">{t("generateAudio")}</Label>
-                <p className="text-xs text-muted-foreground">{t("comingNext")}</p>
+                <p className="text-xs text-muted-foreground">{t("audioHint")}</p>
               </div>
               <Switch id="audio" checked={audio} onCheckedChange={setAudio} />
             </div>

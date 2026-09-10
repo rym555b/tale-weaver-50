@@ -21,7 +21,7 @@ export function AppHeader() {
 
         <div className="flex items-center gap-2">
           <div className="flex overflow-hidden rounded-md border border-border">
-            {(["fr", "en"] as const).map((code) => (
+            {(["fr", "en", "ar"] as const).map((code) => (
               <button
                 key={code}
                 onClick={() => setLocale(code)}
