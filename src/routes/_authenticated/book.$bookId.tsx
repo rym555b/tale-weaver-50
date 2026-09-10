@@ -28,13 +28,13 @@ export const Route = createFileRoute("/_authenticated/book/$bookId")({
   component: BookPage,
 });
 
-const STEP_LABELS: Record<string, TranslationKey> = {
+const STEP_LABELS = {
   analysis: "stepAnalysis",
   pages: "stepPages",
   images: "stepImages",
   covers: "stepCovers",
   audio: "stepAudio",
-};
+} satisfies Record<"analysis" | "pages" | "images" | "covers" | "audio", TranslationKey>;
 
 function BookPage() {
   const { bookId } = Route.useParams();
