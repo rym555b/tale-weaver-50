@@ -65,32 +65,35 @@ export function createLovableTextProvider(): TextProvider {
       let content = "";
       let streamError = "";
 
+      const consumeBlock = (block: string) => {
+        const data = block
+          .split(/\r?\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trim())
+          .join("\n");
+        if (!data || data === "[DONE]") return;
+        try {
+          const event = JSON.parse(data) as {
+            type?: string;
+            delta?: string;
+            error?: { message?: string };
+          };
+          if (event.type === "response.output_text.delta" && event.delta) content += event.delta;
+          if (event.type === "error") streamError = event.error?.message ?? "AI_STREAM_ERROR";
+        } catch {
+          // Ignore heartbeats and non-JSON provider frames.
+        }
+      };
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += value;
         const blocks = buffer.split(/\r?\n\r?\n/);
         buffer = blocks.pop() ?? "";
-        for (const block of blocks) {
-          const data = block
-            .split(/\r?\n/)
-            .filter((line) => line.startsWith("data:"))
-            .map((line) => line.slice(5).trim())
-            .join("\n");
-          if (!data || data === "[DONE]") continue;
-          try {
-            const event = JSON.parse(data) as {
-              type?: string;
-              delta?: string;
-              error?: { message?: string };
-            };
-            if (event.type === "response.output_text.delta" && event.delta) content += event.delta;
-            if (event.type === "error") streamError = event.error?.message ?? "AI_STREAM_ERROR";
-          } catch {
-            // Ignore heartbeats and non-JSON provider frames.
-          }
-        }
+        for (const block of blocks) consumeBlock(block);
       }
+      if (buffer.trim()) consumeBlock(buffer);
 
       if (streamError) throw new Error(streamError);
       if (!content.trim()) throw new Error("AI_EMPTY_RESPONSE");

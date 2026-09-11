@@ -453,31 +453,14 @@ export async function generateCover(db: Db, book: BookRow, side: "front" | "back
 /* Job units: one page (or one cover) per call                         */
 /* ------------------------------------------------------------------ */
 
-async function pageCounts(db: Db, bookId: string, column: "image_url" | "audio_url") {
-  const { count: total } = await db
-    .from("pages")
-    .select("id", { count: "exact", head: true })
-    .eq("book_id", bookId);
-  const { count: remaining } = await db
-    .from("pages")
-    .select("id", { count: "exact", head: true })
-    .eq("book_id", bookId)
-    .is(column, null)
-    .neq("status", "failed");
-  return { total: total ?? 0, remaining: remaining ?? 0 };
-}
-
-async function nextPageMissing(db: Db, bookId: string, column: "image_url" | "audio_url") {
-  const { data } = await db
+async function pagesForMedia(db: Db, bookId: string) {
+  const { data, error } = await db
     .from("pages")
     .select("*")
     .eq("book_id", bookId)
-    .is(column, null)
-    .neq("status", "failed")
-    .order("page_number", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return data;
+    .order("page_number", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }
 
 async function completeJob(db: Db, job: JobRow, total: number, type: JobType): Promise<StepResult> {
@@ -489,16 +472,17 @@ async function completeJob(db: Db, job: JobRow, total: number, type: JobType): P
 }
 
 async function runImagesUnit(db: Db, book: BookRow, job: JobRow): Promise<StepResult> {
-  const { total, remaining } = await pageCounts(db, book.id, "image_url");
-  if (total === 0 || remaining === 0) return completeJob(db, job, total, "images");
+  const pages = await pagesForMedia(db, book.id);
+  const total = pages.length;
+  if (job.current_item >= total) return completeJob(db, job, total, "images");
 
-  const page = await nextPageMissing(db, book.id, "image_url");
+  const page = pages[job.current_item];
   if (!page) return completeJob(db, job, total, "images");
 
   await db.from("books").update({ status: "illustrating", error: null }).eq("id", book.id);
 
   try {
-    await generatePageImage(db, book, page);
+    if (!page.image_url) await generatePageImage(db, book, page);
   } catch (error) {
     const message = error instanceof Error ? error.message : "IMAGE_FAILED";
     if (isFatal(message)) throw error;
@@ -509,15 +493,14 @@ async function runImagesUnit(db: Db, book: BookRow, job: JobRow): Promise<StepRe
       .eq("id", page.id);
   }
 
-  const after = await pageCounts(db, book.id, "image_url");
-  const done = after.total - after.remaining;
-  const progress = after.total > 0 ? Math.round((done / after.total) * 100) : 100;
+  const done = job.current_item + 1;
+  const progress = total > 0 ? Math.round((done / total) * 100) : 100;
   await db
     .from("generation_jobs")
     .update({
-      status: after.remaining === 0 ? "completed" : "processing",
+      status: done >= total ? "completed" : "processing",
       current_item: done,
-      total_items: after.total,
+      total_items: total,
       progress,
       error: null,
     })
@@ -555,16 +538,17 @@ async function runCoversUnit(db: Db, book: BookRow, job: JobRow): Promise<StepRe
 async function runAudioUnit(db: Db, book: BookRow, job: JobRow): Promise<StepResult> {
   if (!book.generate_audio) return completeJob(db, job, 0, "audio");
 
-  const { total, remaining } = await pageCounts(db, book.id, "audio_url");
-  if (total === 0 || remaining === 0) return completeJob(db, job, total, "audio");
+  const pages = await pagesForMedia(db, book.id);
+  const total = pages.length;
+  if (job.current_item >= total) return completeJob(db, job, total, "audio");
 
-  const page = await nextPageMissing(db, book.id, "audio_url");
+  const page = pages[job.current_item];
   if (!page) return completeJob(db, job, total, "audio");
 
   await db.from("books").update({ status: "narrating", error: null }).eq("id", book.id);
 
   try {
-    await generatePageAudio(db, book, page);
+    if (!page.audio_url) await generatePageAudio(db, book, page);
   } catch (error) {
     const message = error instanceof Error ? error.message : "AUDIO_FAILED";
     if (isFatal(message)) throw error;
@@ -574,15 +558,14 @@ async function runAudioUnit(db: Db, book: BookRow, job: JobRow): Promise<StepRes
       .eq("id", page.id);
   }
 
-  const after = await pageCounts(db, book.id, "audio_url");
-  const done = after.total - after.remaining;
-  const progress = after.total > 0 ? Math.round((done / after.total) * 100) : 100;
+  const done = job.current_item + 1;
+  const progress = total > 0 ? Math.round((done / total) * 100) : 100;
   await db
     .from("generation_jobs")
     .update({
-      status: after.remaining === 0 ? "completed" : "processing",
+      status: done >= total ? "completed" : "processing",
       current_item: done,
-      total_items: after.total,
+      total_items: total,
       progress,
       error: null,
     })
