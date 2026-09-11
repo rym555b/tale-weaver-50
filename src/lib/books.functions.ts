@@ -84,6 +84,37 @@ export const retryGeneration = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Adds missing media jobs to books created before media generation was enabled. */
+export const resumeBookMedia = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ bookId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { data: book, error } = await context.supabase
+      .from("books")
+      .select("id, generate_audio")
+      .eq("id", data.bookId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!book) throw new Error("BOOK_NOT_FOUND");
+
+    const jobs = [
+      { book_id: book.id, type: "images", status: "pending", progress: 0, current_item: 0, total_items: 0, error: null },
+      { book_id: book.id, type: "covers", status: "pending", progress: 0, current_item: 0, total_items: 2, error: null },
+      { book_id: book.id, type: "audio", status: book.generate_audio ? "pending" : "completed", progress: book.generate_audio ? 0 : 100, current_item: 0, total_items: 0, error: null },
+    ];
+    const { error: jobsError } = await context.supabase
+      .from("generation_jobs")
+      .upsert(jobs, { onConflict: "book_id,type" });
+    if (jobsError) throw new Error(jobsError.message);
+
+    const { error: updateError } = await context.supabase
+      .from("books")
+      .update({ status: "pending", error: null })
+      .eq("id", book.id);
+    if (updateError) throw new Error(updateError.message);
+    return { ok: true };
+  });
+
 /** Regenerates exactly one illustration or narration, nothing else. */
 export const regeneratePageMedia = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

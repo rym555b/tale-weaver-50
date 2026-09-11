@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
-import { retryGeneration, runGenerationStep } from "@/lib/books.functions";
+import { resumeBookMedia, retryGeneration, runGenerationStep } from "@/lib/books.functions";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/book/$bookId")({
@@ -41,6 +41,7 @@ function BookPage() {
   const { t } = useI18n();
   const step = useServerFn(runGenerationStep);
   const retry = useServerFn(retryGeneration);
+  const resumeMedia = useServerFn(resumeBookMedia);
   const [running, setRunning] = useState(true);
   const busy = useRef(false);
 
@@ -70,6 +71,7 @@ function BookPage() {
 
   const finished = data?.book?.status === "completed";
   const failed = data?.book?.status === "failed";
+  const mediaJobsMissing = !data?.jobs.some((job) => job.type === "images");
 
   const runLoop = useCallback(async () => {
     if (busy.current) return;
@@ -183,6 +185,19 @@ function BookPage() {
             >
               <RotateCcw className="size-4" />
               {t("retry")}
+            </Button>
+          ) : null}
+
+          {finished && mediaJobsMissing ? (
+            <Button
+              onClick={async () => {
+                await resumeMedia({ data: { bookId } });
+                await refetch();
+                setRunning(true);
+              }}
+            >
+              <Play className="size-4" />
+              {t("resume")}
             </Button>
           ) : null}
 
