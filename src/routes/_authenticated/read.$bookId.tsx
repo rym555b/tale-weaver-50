@@ -52,7 +52,7 @@ function ReaderPage() {
       const [book, chapters, pages] = await Promise.all([
         supabase
           .from("books")
-          .select("id, title, description, cover_front_url, cover_back_url")
+          .select("id, title, language, description, cover_front_url, cover_back_url")
           .eq("id", bookId)
           .maybeSingle(),
         supabase
@@ -88,6 +88,9 @@ function ReaderPage() {
     pages.findIndex((item) => item.chapter_id === chapterId);
 
   const signedUrl = (path: string | null) => (path ? data?.media[path] : undefined);
+
+  // An Arabic book always reads right-to-left, whatever the interface language.
+  const bookDir = data?.book?.language === "ar" ? "rtl" : "ltr";
 
   const redoPage = async (kind: "image" | "audio") => {
     if (!page) return;
@@ -138,7 +141,7 @@ function ReaderPage() {
               <SheetHeader>
                 <SheetTitle>{t("chapters")}</SheetTitle>
               </SheetHeader>
-              <nav className="mt-4 space-y-1 overflow-y-auto px-4 pb-6">
+              <nav dir={bookDir} className="mt-4 space-y-1 overflow-y-auto px-4 pb-6">
                 {(data?.chapters ?? []).map((chapter) => {
                   const target = firstPageOfChapter(chapter.id);
                   return (
@@ -218,7 +221,12 @@ function ReaderPage() {
                 </div>
               )}
 
-              <div className="prose-page font-display text-[1.15rem]">{page.text}</div>
+              <div
+                dir={bookDir}
+                className={`prose-page font-display text-[1.15rem] ${bookDir === "rtl" ? "text-right" : ""}`}
+              >
+                {page.text}
+              </div>
 
               {signedUrl(page.audio_url) ? (
                 <audio controls src={signedUrl(page.audio_url)} className="mt-6 w-full" />
