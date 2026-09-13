@@ -16,6 +16,8 @@ export type Database = {
     Tables: {
       books: {
         Row: {
+          audio_model: string
+          audio_voice: string
           cover_back_url: string | null
           cover_front_url: string | null
           created_at: string
@@ -24,6 +26,7 @@ export type Database = {
           generate_audio: boolean
           genre: string | null
           id: string
+          image_model: string
           language: string
           narration_style: string
           source_text: string
@@ -36,6 +39,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          audio_model?: string
+          audio_voice?: string
           cover_back_url?: string | null
           cover_front_url?: string | null
           created_at?: string
@@ -44,6 +49,7 @@ export type Database = {
           generate_audio?: boolean
           genre?: string | null
           id?: string
+          image_model?: string
           language?: string
           narration_style?: string
           source_text?: string
@@ -56,6 +62,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          audio_model?: string
+          audio_voice?: string
           cover_back_url?: string | null
           cover_front_url?: string | null
           created_at?: string
@@ -64,6 +72,7 @@ export type Database = {
           generate_audio?: boolean
           genre?: string | null
           id?: string
+          image_model?: string
           language?: string
           narration_style?: string
           source_text?: string
